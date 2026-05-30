@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { 
+      width: 220px; 
+      padding: 16px; 
+      font-family: -apple-system, sans-serif; 
+      background: #fafafa; 
+      color: #333; 
+      margin: 0; 
+      display: flex; 
+      flex-direction: column; 
+      align-items: center; 
+    }
+    h3 { margin: 0 0 12px 0; font-size: 15px; color: #111; }
+    #statusBox { margin-bottom: 16px; font-size: 13px; text-align: center; color: #666; line-height: 1.4; }
+    button { 
+      width: 100%; 
+      padding: 10px; 
+      font-weight: bold; 
+      color: white; 
+      background: #007aff; 
+      border: none; 
+      border-radius: 6px; 
+      cursor: pointer; 
+      transition: 0.2s; 
+      display: none; /* 영상이 없을 땐 숨김 */
+    }
+    button:hover { background: #005bb5; }
+    button:disabled { background: #ccc; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <h3>LMS Downloader</h3>
+  <div id="statusBox">상태 확인 중...</div>
+  <button id="downloadBtn">강의 다운로드</button>
+  
+  <script src="popup.js"></script>
+</body>
+</html>

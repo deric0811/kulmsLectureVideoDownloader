@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "KULMS Video Downloader",
+  "version": "1.0.0",
+  "description": "교내 시스템 전용 오프라인 학습 지원 도구(Offline learning support tool exclusive to the campus system)",
+  "permissions": [
+    "webRequest",
+    "declarativeNetRequest",
+    "scripting",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "*://kucom.korea.ac.kr/*",
+    "*://korea-cms-object.cdn.gov-ntruss.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "LMS 영상 다운로더",
+    "default_popup": "popup.html"
+  }
+}
