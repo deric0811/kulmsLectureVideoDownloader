@@ -15,7 +15,7 @@
 
 // [병합 도구] 실제 배포용 GitHub 릴리즈 페이지 주소로 교체해서 사용하세요.
 // TODO: 릴리즈 배포 시 아래 주소만 실제 저장소(예: https://github.com/계정명/저장소명/releases/latest)로 교체
-const TAURI_APP_RELEASE_URL = "https://github.com/deric0811/univ-agent-client/releases/latest";
+const TAURI_APP_RELEASE_URL = "https://github.com/";
 
 const TYPE_MULTI = "multi";
 const TYPE_SINGLE = "single";

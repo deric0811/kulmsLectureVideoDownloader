@@ -150,9 +150,9 @@
 
   <!-- 영상 병합 도구 (Tauri Desktop App) 연계 배너 -->
   <a id="tauriLink" href="#" target="_blank" rel="noopener noreferrer"
-     role="button" title="분할 영상 무료 병합 및 강의 요약노트 생성 데스크톱 앱 다운로드">
-    🎬 영상 합치고, 강의 요약노트까지
-    <span class="sub">무료 영상 병합 · 요약노트 생성 앱 다운로드 ↗</span>
+     role="button" title="분할 영상 무료 병합 도구 (Tauri Desktop App)">
+    ✂️ ➜ 🎬 분할 영상 무료 병합 도구 (Tauri Desktop App)
+    <span class="sub">Part 1~N 을 하나의 강의 영상으로 합치기</span>
   </a>
 
   <script src="popup.js"></script>

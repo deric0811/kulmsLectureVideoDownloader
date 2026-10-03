@@ -15,7 +15,7 @@
 
 // [병합 도구] 실제 배포용 GitHub 릴리즈 페이지 주소로 교체해서 사용하세요.
 // TODO: 릴리즈 배포 시 아래 주소만 실제 저장소(예: https://github.com/계정명/저장소명/releases/latest)로 교체
-const TAURI_APP_RELEASE_URL = "https://github.com/deric0811/univ-agent-client/releases/latest";
+const TAURI_APP_RELEASE_URL = "https://github.com/";
 
 const TYPE_MULTI = "multi";
 const TYPE_SINGLE = "single";
@@ -147,16 +147,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // -- 상태 2: 다운로드 준비/재생 대기 --
     if (state.status === STATUS_WAITING_PLAY) {
-      // chapter 유효 + 파트 ID 확보, 단 영상 경로(base) 미확보
-      if (state.planReason === "part_info_ready_media_path_pending") {
-        statusBox.innerHTML =
-          "<b>파트 정보 확보</b> — 영상 경로 확인 대기 중입니다.";
-        setGuide('warn',
-          "본편 영상이 감지되면 파트 다운로드가 준비됩니다. 화면의 동영상을 1초 이상 재생(클릭)해주세요.");
-        downloadBtn.disabled = true;
-        downloadBtn.innerText = "영상 경로 확인 대기";
-        return;
-      }
       // chapter.xml 은 찾았지만 아직 plan 이 없는 경우와,
       // 아무 신호도 없는 경우를 구분해 안내한다.
       const structureFound = state.planReason === "chapter_found_awaiting" ||

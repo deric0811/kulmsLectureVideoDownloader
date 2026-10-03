@@ -1,8 +1,8 @@
 // ============================================================================
 // KULMS Video Downloader — background.js (MV3 Service Worker)
-// 버전 1.4.5 — 배지 라이프사이클 정상화 + 멀티/단일 감지 파이프라인 이원화
+// 버전 1.4.2 — 배지 라이프사이클 정상화 + 멀티/단일 감지 파이프라인 이원화
 //
-//   [v1.4.5 리팩토링 핵심]
+//   [v1.4.2 리팩토링 핵심]
 //   1) 탭별 상태 SSOT(Single Source of Truth) = chrome.storage.session
 //      (키: `tab_${tabId}`). SW 수면(Inactive)·재기동에도 상태가 휘발되지 않는다.
 //   2) GET 배지는 chrome.action.setBadgeText({ text, tabId }) 로만 설정하며,

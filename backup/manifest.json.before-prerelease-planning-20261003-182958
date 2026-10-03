@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "KULMS Video Downloader",
-  "version": "1.4.5",
+  "version": "1.4.2",
   "description": "교내 시스템 전용 오프라인 학습 지원 도구(Offline learning support tool exclusive to the campus system)",
   "permissions": [
     "webRequest",

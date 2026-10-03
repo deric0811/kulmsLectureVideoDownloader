@@ -1,8 +1,8 @@
 // ============================================================================
 // KULMS Video Downloader — background.js (MV3 Service Worker)
-// 버전 1.4.5 — 배지 라이프사이클 정상화 + 멀티/단일 감지 파이프라인 이원화
+// 버전 1.4.2 — 배지 라이프사이클 정상화 + 멀티/단일 감지 파이프라인 이원화
 //
-//   [v1.4.5 리팩토링 핵심]
+//   [v1.4.2 리팩토링 핵심]
 //   1) 탭별 상태 SSOT(Single Source of Truth) = chrome.storage.session
 //      (키: `tab_${tabId}`). SW 수면(Inactive)·재기동에도 상태가 휘발되지 않는다.
 //   2) GET 배지는 chrome.action.setBadgeText({ text, tabId }) 로만 설정하며,
@@ -123,91 +123,14 @@ function isPrimaryMediaName(name) {
 }
 
 // CDN/LMS URL 의 ".../contents/" 직전까지를 media base 로 유도한다.
-//   live MP4 URL → https://<cdn>/contents7/.../contents/
-//   [주의] chapterUrl 은 media base 로 쓰지 않는다 (kucom 호스트 추측 방지).
+//   video URL  → https://<cdn>/contents7/.../contents/
+//   chapterUrl → https://kucom.korea.ac.kr/contents7/.../contents/
 function mediaBaseFromUrl(url) {
   if (!url) return null;
   const m = String(url).match(/(\/contents\d*\/[^\/]+\/[^\/]+\/contents\/)/i);
   if (!m) return null;
   const origin = String(url).match(/^(https?:\/\/[^\/]+)/i);
   return (origin ? origin[1] : "") + m[1];
-}
-
-function originOf(url) {
-  const m = String(url || "").match(/^(https?:\/\/[^\/]+)/i);
-  return m ? m[1] : "";
-}
-
-// 민감 query 값을 마스킹한 로그용 URL.
-function maskUrl(url) {
-  if (!url) return "";
-  try {
-    const u = new URL(url);
-    for (const k of [...u.searchParams.keys()]) u.searchParams.set(k, "***");
-    return u.toString();
-  } catch (e) {
-    return String(url).replace(/([?&][^=&#]+=)[^&#]*/g, "$1***");
-  }
-}
-
-// 같은 contentKey 의 liveMediaUrl 에서만 media base 를 확보한다.
-//   - CDN 호스트 하드코딩 없음: liveMediaUrl 의 origin + 강의 base 경로 보존.
-//   - contentKey 불일치/파싱 실패면 null → 추측 금지.
-function liveMediaBaseForSession(session) {
-  const live = session && session.liveMediaUrl;
-  if (!live) return null;
-  const contentKey = session.contentKey;
-  if (!contentKey) return null;
-  const liveKey = contentKeyFromUrl(live);
-  if (!liveKey || liveKey !== contentKey) return null;
-  return mediaBaseFromUrl(live);
-}
-
-function buildPartUrlsFromBase(base, storyIds) {
-  if (!base || !Array.isArray(storyIds) || storyIds.length === 0) return [];
-  return storyIds.map((id) => base + "media_files/main_" + id + ".mp4");
-}
-
-function sameMediaBase(a, b) {
-  if (!a || !b) return false;
-  try {
-    const ua = new URL(a), ub = new URL(b);
-    return ua.origin === ub.origin && ua.pathname === ub.pathname;
-  } catch (e) {
-    return a === b;
-  }
-}
-
-// live base 로 파트 URL 을 (재)구성한다. 변경 시에만 로그를 남긴다.
-//   chapterUrl 폴백 없음. base/story 가 없으면 아무것도 만들지 않는다.
-function refreshPartUrlsFromLive(s) {
-  if (!s.chapterStoryIds || s.chapterStoryIds.length === 0) {
-    return { base: null, urls: [] };
-  }
-  const base = liveMediaBaseForSession(s);
-  if (!base) {
-    // live base 미확보 → 추측 URL 을 남기지 않는다 (기존 chapterUrl 유래 kucom URL 포함).
-    if (s.chapterPartUrls && s.chapterPartUrls.length > 0) {
-      s.chapterPartUrls = [];
-    }
-    return { base: null, urls: [] };
-  }
-  const nextUrls = buildPartUrlsFromBase(base, s.chapterStoryIds);
-  if (nextUrls.length === 0) return { base: base, urls: [] };
-
-  const prevBase = s.chapterPartUrls && s.chapterPartUrls.length
-    ? mediaBaseFromUrl(s.chapterPartUrls[0]) : null;
-  const changed = !sameMediaBase(base, prevBase) ||
-    s.chapterPartUrls.length !== nextUrls.length;
-  if (changed) {
-    s.chapterPartUrls = nextUrls;
-    const origin = originOf(base);
-    console.log(sessionTag(s) + " MEDIA_BASE_SELECTED origin=" + origin +
-      " content=" + s.contentKey + " source=live_media");
-    console.log(sessionTag(s) + " " + (prevBase ? "PART_URLS_REBUILT" : "PART_URLS_BUILT") +
-      " count=" + nextUrls.length + " origin=" + origin);
-  }
-  return { base: base, urls: s.chapterPartUrls.slice() };
 }
 
 function newSession(tabId, contentKey, generation) {
@@ -596,9 +519,15 @@ chrome.webRequest.onBeforeRequest.addListener(
       s.liveMediaConfidence = "verified";
       s.lastMediaSeenAt = details.timeStamp || Date.now();
       s.downloadStatus = null;
-      // chapterPartUrls 는 절대 지우지 않는다. 단, 같은 강의 liveMediaUrl 의 base 와
-      // 다르면(chapterUrl 유래 kucom URL 등) live base 로 다시 구성한다.
-      refreshPartUrlsFromLive(s);
+      // chapterPartUrls 는 절대 지우지 않는다. 비어 있으면 지금 base 로 보강.
+      if (s.chapterStoryIds.length > 0 && s.chapterPartUrls.length === 0) {
+        const base = mediaBaseFromUrl(s.liveMediaUrl) || mediaBaseFromUrl(s.chapterUrl);
+        if (base) {
+          s.chapterPartUrls = s.chapterStoryIds.map(
+            (id) => base + "media_files/main_" + id + ".mp4"
+          );
+        }
+      }
       return s;
     }, generation);
     logSession(merged || { ...session, generation: generation }, "LIVE_MEDIA_VERIFIED", name);
@@ -610,82 +539,6 @@ chrome.webRequest.onBeforeRequest.addListener(
 // ----------------------------------------------------------------------------
 // 1-0. chapter.xml 파싱 + 다운로드 계획 선택
 // ----------------------------------------------------------------------------
-
-// [패치] chapter probe 중복/자기 재감지 방지용 in-flight 레지스트리.
-//   key = tabId:contentKey:generation:normalizedXmlUrl
-//   - 네트워크 시작 전에 등록하고, 성공/실패 모두 finally 에서 해제한다.
-//   - 자체 probe fetch 가 onBeforeRequest chapter 분기에 재감지되어도
-//     동일 key 의 진행 중 Promise 를 재사용할 뿐 새 probe 를 시작하지 않는다.
-//   - query 전체를 제거하지 않는다: 확인된 cache-busting `_` 항목만 제외한다.
-//
-//   [순환 대기 구분]
-//     재감지 핸들러가 진행 중 probe Promise 를 await 하는 것은 정상 의존이다.
-//     probe 본문(runChapterProbe 내부 IIFE)은 자기 자신의 Promise 를 await 하지
-//     않으므로 순환 의존이 만들어지지 않는다. 새 probe 시작은 항상
-//     `_chapterProbes.set` 이후에만 일어나고, 해제는 finally 에서 한다.
-const _chapterProbes = new Map();
-
-function probeTag(tabId, contentKey, generation) {
-  return "[probe tabId:" + tabId + " content:" + contentKey + " gen:" + generation + "]";
-}
-
-// 확인된 cache-busting(`_`)만 제거하고 의미 있는 query 는 보존한다.
-function normalizeChapterUrl(url) {
-  if (!url) return "";
-  try {
-    const u = new URL(url);
-    u.searchParams.delete("_");
-    return u.toString();
-  } catch (e) {
-    // URL API 실패(상대 URL 등) 시: `_` 파라미터만 안전하게 제거
-    return String(url)
-      .replace(/([?&])_=[^&#]*/g, "$1")
-      .replace(/[?&](?=#|$)/g, "");
-  }
-}
-
-function chapterProbeKey(tabId, contentKey, generation, xmlUrl) {
-  return tabId + ":" + contentKey + ":" + generation + ":" + normalizeChapterUrl(xmlUrl);
-}
-
-// 동일 key 의 진행 중 probe 가 있으면 재사용, 없으면 새로 시작.
-function runChapterProbe(tabId, contentKey, generation, xmlUrl) {
-  const tag = probeTag(tabId, contentKey, generation);
-  if (!xmlUrl) {
-    console.log(tag + " PROBE_SKIPPED reason=xml_url_missing");
-    return Promise.resolve({ ok: false, reason: "xml_url_missing", storyIds: [], title: null });
-  }
-
-  const key = chapterProbeKey(tabId, contentKey, generation, xmlUrl);
-  const existing = _chapterProbes.get(key);
-  if (existing) {
-    console.log(tag + " PROBE_REUSED url=" + normalizeChapterUrl(xmlUrl));
-    return existing;
-  }
-
-  console.log(tag + " PROBE_START url=" + normalizeChapterUrl(xmlUrl));
-  const promise = (async () => {
-    try {
-      return await probeChapterXml(tabId, xmlUrl);
-    } catch (err) {
-      console.log(tag + " PROBE_ERROR reason=" + (err && err.message ? err.message : err));
-      return {
-        ok: false,
-        reason: String(err && err.message ? err.message : err),
-        storyIds: [],
-        title: null
-      };
-    } finally {
-      _chapterProbes.delete(key);
-      console.log(tag + " PROBE_END url=" + normalizeChapterUrl(xmlUrl));
-    }
-  })();
-
-  // 네트워크(chapter.xml fetch) 시작 전에 등록을 보장하기 위해
-  // async IIFE 호출 직후 동기적으로 set 한다.
-  _chapterProbes.set(key, promise);
-  return promise;
-}
 
 // 챕터 XML 을 동일 출처(kucom) 프레임에서 fetch 하여 story_idref 를 추출한다.
 async function probeChapterXml(tabId, xmlUrl) {
@@ -754,7 +607,7 @@ async function probeChapterXml(tabId, xmlUrl) {
 //   story_idref 1개 이상 → chapterStatus=valid + multipart 파트 URL 구성.
 //   비어 있으면 invalid 처리하되 liveMedia* 는 건드리지 않는다.
 async function parseAndApplyChapter(tabId, contentKey, generation, xmlUrl) {
-  const probed = await runChapterProbe(tabId, contentKey, generation, xmlUrl);
+  const probed = await probeChapterXml(tabId, xmlUrl);
   const merged = await mutateSession(tabId, contentKey, (s) => {
     if (!probed.ok || !probed.storyIds || probed.storyIds.length === 0) {
       // 이미 valid 하게 파싱된 파트가 있으면 일시적 재파싱 실패로 덮지 않는다.
@@ -765,8 +618,13 @@ async function parseAndApplyChapter(tabId, contentKey, generation, xmlUrl) {
     } else {
       s.chapterStatus = "valid";
       s.chapterStoryIds = probed.storyIds;
-      // live media base 가 있을 때만 파트 URL 을 구성한다 (chapterUrl 폴백 금지).
-      refreshPartUrlsFromLive(s);
+      // liveMediaUrl 이 없어도 chapterUrl 기반 base 로 multipart URL 을 구성한다.
+      const base = mediaBaseFromUrl(s.liveMediaUrl) || mediaBaseFromUrl(s.chapterUrl);
+      if (base) {
+        s.chapterPartUrls = probed.storyIds.map(
+          (id) => base + "media_files/main_" + id + ".mp4"
+        );
+      }
     }
     if (probed.title && !s.title) s.title = probed.title;
     s.downloadStatus = null;
@@ -797,15 +655,15 @@ async function recomputePlan(tabId, contentKey, generation) {
     let reason = "none";
 
     if (cur.chapterStatus === "valid" && cur.chapterStoryIds.length > 0) {
-      // live media base 로만 파트 URL 을 구성한다 (추측 URL 금지).
-      refreshPartUrlsFromLive(cur);
-      if (cur.chapterPartUrls.length > 0) {
-        plan = "multipart";
-        reason = "chapter_valid";
-      } else {
-        // 파트 ID 는 보존하되, 영상 경로(base) 미확보 상태다.
-        plan = "none";
-        reason = "part_info_ready_media_path_pending";
+      plan = "multipart";
+      reason = "chapter_valid";
+      if (cur.chapterPartUrls.length === 0) {
+        const base = mediaBaseFromUrl(cur.liveMediaUrl) || mediaBaseFromUrl(cur.chapterUrl);
+        if (base) {
+          cur.chapterPartUrls = cur.chapterStoryIds.map(
+            (id) => base + "media_files/main_" + id + ".mp4"
+          );
+        }
       }
     } else if (cur.liveMediaConfidence === "verified") {
       plan = "single";
@@ -1004,20 +862,24 @@ async function executeMultiDownload(tabId, st) {
   }
 
   try {
+    let partUrls = Array.isArray(st.chapterPartUrls) ? st.chapterPartUrls.slice() : [];
     let storyIds = Array.isArray(st.chapterStoryIds) ? st.chapterStoryIds.slice() : [];
 
-    // 1) 파트 ID 미확보 시에만 chapter.xml 재파싱 (동일 출처 프레임).
-    //    URL 구성은 live media base 가 있을 때만 refreshPartUrlsFromLive 에서 수행.
-    if (storyIds.length === 0) {
+    // 파트 URL 미구성 시 chapter.xml 재파싱 (동일 출처 프레임)
+    if (partUrls.length === 0 || storyIds.length === 0) {
       const targetXmlUrl = capturedXmlUrl || deriveTargetXmlUrl(capturedVideoUrl);
       if (targetXmlUrl) {
-        const probed = await runChapterProbe(tabId, contentKey, st.generation, targetXmlUrl);
+        const probed = await probeChapterXml(tabId, targetXmlUrl);
         if (probed.ok && probed.storyIds && probed.storyIds.length > 0) {
           storyIds = probed.storyIds;
+          const base = mediaBaseFromUrl(capturedVideoUrl) || mediaBaseFromUrl(targetXmlUrl);
+          if (base) {
+            partUrls = storyIds.map((id) => base + "media_files/main_" + id + ".mp4");
+          }
           await mutateSession(tabId, contentKey, (s) => {
             s.chapterStatus = "valid";
             s.chapterStoryIds = storyIds;
-            refreshPartUrlsFromLive(s);
+            if (partUrls.length) s.chapterPartUrls = partUrls;
             return s;
           }, st.generation);
         } else {
@@ -1032,32 +894,6 @@ async function executeMultiDownload(tabId, st) {
           "[LMS Helper] ⚠️ chapter.xml URL 없음, 단일 영상으로 폴백"
         );
       }
-    }
-
-    // 2) 다운로드 직전: 같은 강의 liveMediaUrl 에서 base 재확인.
-    //    기존 chapterPartUrls 가 kucom URL 등 stale 이어도 live base 로 교체한다.
-    let partUrls = [];
-    if (storyIds.length > 0) {
-      const liveBase = liveMediaBaseForSession(st);
-      if (!liveBase) {
-        // 파트 ID 는 있지만 영상 경로가 불명확 → 추측 금지, 보류.
-        logSession(st, "PLAN_PENDING", "part_info_ready_media_path_pending");
-        await mutateSession(tabId, contentKey, (s) => {
-          s.chapterStoryIds = storyIds;
-          s.downloadPlan = "none";
-          s.planReason = "part_info_ready_media_path_pending";
-          s.status = STATUS_WAITING_PLAY;
-          return s;
-        }, st.generation);
-        return { ok: false, reason: "part_info_ready_media_path_pending" };
-      }
-      const refreshed = await mutateSession(tabId, contentKey, (s) => {
-        s.chapterStoryIds = storyIds;
-        refreshPartUrlsFromLive(s);
-        return s;
-      }, st.generation);
-      partUrls = refreshed && Array.isArray(refreshed.chapterPartUrls)
-        ? refreshed.chapterPartUrls.slice() : [];
     }
 
     // 강의명은 최상위 프레임(예: kulms.korea.ac.kr)에서 추출
@@ -1114,7 +950,7 @@ async function executeMultiDownload(tabId, st) {
 
     console.log("[LMS Helper] [멀티] 최종 다운로드 타깃 수:", targets.length);
     targets.forEach((t, i) =>
-      console.log("  [" + (i + 1) + "] " + t.fileName + " ← " + maskUrl(t.url))
+      console.log("  [" + (i + 1) + "] " + t.fileName + " ← " + t.url)
     );
 
     // ---- C. DNR 룰 원자적 등록 (기존 룰 전체 정리 → 고유 ID 재등록) ------

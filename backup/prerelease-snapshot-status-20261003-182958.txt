@@ -1,0 +1,28 @@
+snapshot: 20261003-182958
+
+=== git status --short ===
+ M background.js
+ M manifest.json
+ M popup.html
+ M popup.js
+?? backup/
+
+=== git diff --stat ===
+ background.js | 1309 +++++++++++++++++++++++++++++++++++++++++++++------------
+ manifest.json |    3 +-
+ popup.html    |  176 ++++++--
+ popup.js      |  245 ++++++++++-
+ 4 files changed, 1419 insertions(+), 314 deletions(-)
+
+=== git diff --numstat ===
+1042	267	background.js
+2	1	manifest.json
+147	29	popup.html
+228	17	popup.js
+
+=== HEAD ===
+ae87c0982c14d70086c3182690b811d1ad92829f
+
+=== syntax (runtime sources) ===
+background.js OK
+popup.js OK
